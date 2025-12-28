@@ -1,0 +1,201 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAV Public School - Dynamic Networking Quiz</title>
+    <style>
+        :root { --primary: #004a99; --correct: #90EE90; --wrong: #FFB6C1; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        header { background: var(--primary); color: white; width: 100%; max-width: 550px; padding: 15px; border-radius: 12px 12px 0 0; text-align: center; }
+        #quiz-container { background: white; padding: 25px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 550px; box-sizing: border-box; }
+        .timer-bar { height: 5px; background: #eee; width: 100%; margin-bottom: 20px; border-radius: 10px; overflow: hidden; }
+        #progress { height: 100%; background: var(--primary); width: 100%; transition: width 1s linear; }
+        .status-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: bold; }
+        .option { display: block; width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #ddd; cursor: pointer; border-radius: 8px; text-align: left; background: #fff; font-size: 16px; }
+        .correct { background-color: var(--correct) !important; border-color: #28a745 !important; }
+        .wrong { background-color: var(--wrong) !important; border-color: #dc3545 !important; }
+        .nav-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        button.nav-btn { flex: 1; padding: 12px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; color: white; }
+        .btn-back { background: #6c757d; }
+        .btn-skip { background: #ffc107; color: black !important; }
+        .btn-next { background: #28a745; display: none; }
+        .result-item { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>DAV Public School</h1>
+    <p>Randomized Networking Quiz</p>
+</header>
+
+<div id="quiz-container">
+    <div id="quiz-content">
+        <div class="timer-bar"><div id="progress"></div></div>
+        <div class="status-row">
+            <span id="q-number">Question 1/5</span>
+            <span id="timer-text">20s</span>
+        </div>
+        <h3 id="question-text"></h3>
+        <div id="options-container"></div>
+        <div class="nav-buttons">
+            <button class="nav-btn btn-back" id="back-btn" onclick="prevQuestion()">Back</button>
+            <button class="nav-btn btn-skip" id="skip-btn" onclick="skipQuestion()">Skip</button>
+            <button class="nav-btn btn-next" id="next-btn" onclick="nextQuestion()">Next</button>
+        </div>
+    </div>
+
+    <div id="result-page" style="display:none;">
+        <h2 style="text-align:center">Quiz Result</h2>
+        <h3 id="score-text" style="text-align:center; color: var(--primary);"></h3>
+        <div id="answers-review"></div>
+        <button class="nav-btn btn-back" style="width:100%; margin-top:20px;" onclick="restartQuiz()">Restart (New Questions)</button>
+    </div>
+</div>
+
+<script>
+    // Pool of questions to select from
+    const questionPool = [
+        { q: "What does LAN stand for?", a: ["Local Area Network", "Large Area Network", "Light Access Node", "Land Area Network"], c: "Local Area Network" },
+        { q: "Which device connects different networks?", a: ["Router", "Repeater", "Hub", "Switch"], c: "Router" },
+        { q: "The physical layout of a network is its:", a: ["Topology", "Protocol", "Routing", "Architecture"], c: "Topology" },
+        { q: "What is the largest type of network?", a: ["WAN", "LAN", "MAN", "PAN"], c: "WAN" },
+        { q: "What does HTTP stand for?", a: ["Hyper Text Transfer Protocol", "High Text Transfer Protocol", "Hyper Tech Transfer Process", "Hidden Text Protocol"], c: "Hyper Text Transfer Protocol" },
+        { q: "Which protocol is used for sending emails?", a: ["SMTP", "FTP", "IP", "HTTP"], c: "SMTP" },
+        { q: "A private network within an organization is called:", a: ["Intranet", "Internet", "Extranet", "Ethernet"], c: "Intranet" },
+        { q: "What is the brain of a computer network?", a: ["Server", "Client", "Node", "Switch"], c: "Server" }
+    ];
+
+    let quizQuestions = [], currentIdx = 0, timer, timeLeft = 20, score = 0;
+    let userAnswers = [];
+
+    function shuffleQuiz() {
+        // Shuffle the pool and pick 5
+        let shuffledPool = [...questionPool].sort(() => Math.random() - 0.5);
+        quizQuestions = shuffledPool.slice(0, 5);
+        
+        // Shuffle options for each question
+        quizQuestions.forEach(q => {
+            q.a = q.a.sort(() => Math.random() - 0.5);
+        });
+        
+        currentIdx = 0;
+        score = 0;
+        userAnswers = new Array(5).fill(null);
+        document.getElementById('quiz-content').style.display = 'block';
+        document.getElementById('result-page').style.display = 'none';
+        loadQuestion();
+    }
+
+    function startTimer() {
+        clearInterval(timer);
+        timeLeft = 20;
+        updateTimerUI();
+        timer = setInterval(() => {
+            timeLeft--;
+            updateTimerUI();
+            if (timeLeft <= 0) { clearInterval(timer); autoSkip(); }
+        }, 1000);
+    }
+
+    function updateTimerUI() {
+        document.getElementById('timer-text').innerText = timeLeft + 's';
+        document.getElementById('progress').style.width = (timeLeft / 20) * 100 + '%';
+    }
+
+    function loadQuestion() {
+        const q = quizQuestions[currentIdx];
+        document.getElementById('q-number').innerText = `Question ${currentIdx + 1}/5`;
+        document.getElementById('question-text').innerText = q.q;
+        document.getElementById('back-btn').disabled = currentIdx === 0;
+        document.getElementById('next-btn').style.display = 'none';
+        document.getElementById('skip-btn').style.display = 'block';
+        
+        const container = document.getElementById('options-container');
+        container.innerHTML = '';
+
+        q.a.forEach((opt) => {
+            const btn = document.createElement('button');
+            btn.innerText = opt;
+            btn.className = 'option';
+            if(userAnswers[currentIdx] !== null && userAnswers[currentIdx] !== "Skipped") {
+                showResultState(btn, opt);
+            } else {
+                btn.onclick = () => checkAnswer(opt, btn);
+            }
+            container.appendChild(btn);
+        });
+        startTimer();
+    }
+
+    function checkAnswer(selected, btn) {
+        clearInterval(timer);
+        userAnswers[currentIdx] = selected;
+        const correctVal = quizQuestions[currentIdx].c;
+        if (selected === correctVal) {
+            btn.classList.add('correct');
+            score++;
+        } else {
+            btn.classList.add('wrong');
+            findAndHighlightCorrect(correctVal);
+        }
+        finalizeTurn();
+    }
+
+    function findAndHighlightCorrect(val) {
+        const btns = document.getElementsByClassName('option');
+        for (let b of btns) { if(b.innerText === val) b.classList.add('correct'); }
+    }
+
+    function showResultState(btn, optVal) {
+        clearInterval(timer);
+        const correctVal = quizQuestions[currentIdx].c;
+        if (optVal === correctVal) btn.classList.add('correct');
+        if (optVal === userAnswers[currentIdx] && optVal !== correctVal) btn.classList.add('wrong');
+        finalizeTurn();
+    }
+
+    function finalizeTurn() {
+        const btns = document.getElementsByClassName('option');
+        for (let b of btns) b.disabled = true;
+        document.getElementById('next-btn').style.display = 'block';
+        document.getElementById('skip-btn').style.display = 'none';
+    }
+
+    function nextQuestion() {
+        currentIdx < 4 ? (currentIdx++, loadQuestion()) : showFinalResults();
+    }
+
+    function prevQuestion() {
+        if (currentIdx > 0) { currentIdx--; loadQuestion(); }
+    }
+
+    function skipQuestion() {
+        if(userAnswers[currentIdx] === null) userAnswers[currentIdx] = "Skipped";
+        nextQuestion();
+    }
+
+    function autoSkip() { if(userAnswers[currentIdx] === null) skipQuestion(); }
+
+    function showFinalResults() {
+        clearInterval(timer);
+        document.getElementById('quiz-content').style.display = 'none';
+        document.getElementById('result-page').style.display = 'block';
+        document.getElementById('score-text').innerText = `Final Score: ${score} / 5`;
+        const review = document.getElementById('answers-review');
+        review.innerHTML = "<h4>Review:</h4>";
+        quizQuestions.forEach((q, i) => {
+            review.innerHTML += `<div class="result-item"><b>${i+1}. ${q.q}</b><br><small style="color:green">Answer: ${q.c}</small></div>`;
+        });
+    }
+
+    function restartQuiz() { shuffleQuiz(); }
+
+    // Initial Start
+    shuffleQuiz();
+</script>
+
+</body>
+</html>
